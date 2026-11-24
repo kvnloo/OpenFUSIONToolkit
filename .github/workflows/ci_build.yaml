@@ -1,4 +1,4 @@
-name: CI Build
+name: CI Build (fork run)
 
 on:
   push:
@@ -22,7 +22,6 @@ concurrency:
 
 jobs:
   build:
-    if: github.repository == 'OpenFUSIONToolkit/OpenFUSIONToolkit'
     name: ${{ format('{0} ({1})', matrix.config.name, matrix.parallel) }}
     runs-on: ${{ matrix.config.os }}
     env:
@@ -35,16 +34,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        parallel: [openmp, mpich, openmpi]
+        parallel: [openmp]
         config:
-        - {
-            name: "Ubuntu 22.04 GCC 12",
-            os: ubuntu-22.04,
-            cc: "gcc-12", cxx: "g++-12", fc: "gfortran-12",
-            python: "python3",
-            build_flags: "--nthread=4 --oblas_dynamic_arch --build_umfpack=1 --build_superlu=1",
-            mpi_build_flags: "--nthread=4 --oblas_dynamic_arch --build_umfpack=1 --build_superlu_dist=1"
-          }
         - {
             name: "Ubuntu 24.04 GCC 14",
             os: ubuntu-24.04,
@@ -52,24 +43,6 @@ jobs:
             python: "python3",
             build_flags: "--nthread=4 --oblas_dynamic_arch --build_umfpack=1 --build_superlu=1 --build_strumpack=1",
             mpi_build_flags: "--nthread=4 --oblas_dynamic_arch --build_umfpack=1 --build_superlu_dist=1 --build_strumpack=1 --strumpack_mpi=1"
-          }
-        - {
-            name: "Ubuntu 24.04 Intel 2025.2",
-            os: ubuntu-24.04,
-            cc: "icx", cxx: "icx", fc: "ifx",
-            python: "python3",
-            build_flags: "--nthread=4 --use_mkl --mkl_root=$MKLROOT --oft_use_lto=0",
-            mpi_build_flags: "--nthread=4 --use_mkl --mkl_root=$MKLROOT --oft_use_lto=0",
-            oneapi_ver: "-2025.2"
-          }
-        - {
-            name: "Ubuntu 24.04 Intel latest",
-            os: ubuntu-24.04,
-            cc: "icx", cxx: "icx", fc: "ifx",
-            python: "python3",
-            build_flags: "--nthread=4 --use_mkl --mkl_root=$MKLROOT",
-            mpi_build_flags: "--nthread=4 --use_mkl --mkl_root=$MKLROOT",
-            oneapi_ver: ""
           }
         - {
             name: "macOS Sequoia GCC 15",
@@ -80,44 +53,6 @@ jobs:
             mpi_build_flags: "--nthread=3 --build_umfpack=1 --build_superlu_dist=1",
             xcode_path: "/Applications/Xcode_16.4.app/Contents/Developer"
           }
-        - {
-            name: "macOS Sequoia GCC 15 (x86)",
-            os: macos-15-intel,
-            cc: "gcc-15", cxx: "g++-15", fc: "gfortran-15",
-            python: "python3.13",
-            build_flags: "--nthread=4 --build_umfpack=1 --build_superlu=1",
-            mpi_build_flags: "--nthread=4 --build_umfpack=1 --build_superlu_dist=1",
-            xcode_path: "/Applications/Xcode_16.4.app/Contents/Developer"
-          }
-        - {
-            name: "macOS Tahoe GCC 15",
-            os: macos-26,
-            cc: "gcc-15", cxx: "g++-15", fc: "gfortran-15",
-            python: "python3.13",
-            build_flags: "--nthread=3 --build_umfpack=1 --build_superlu=1",
-            mpi_build_flags: "--nthread=3 --build_umfpack=1 --build_superlu_dist=1",
-            xcode_path: "/Applications/Xcode_26.2.0.app/Contents/Developer"
-          }
-        exclude:
-          - parallel: mpich
-            config: {os: macos-15-intel}
-          - parallel: openmpi
-            config: {os: macos-15}
-          - parallel: openmpi
-            config: {os: macos-15-intel}
-          - parallel: openmpi
-            config: {os: macos-26}
-          - parallel: openmpi
-            config: {cc: icx}
-        include:
-          - parallel: mpich_petsc
-            config: {
-              name: "Ubuntu 22.04 GCC 12",
-              os: ubuntu-22.04,
-              cc: "gcc-12", cxx: "g++-12", fc: "gfortran-12",
-              python: "python3",
-              mpi_build_flags: "--nthread=2 --oblas_dynamic_arch --build_petsc=1 --petsc_version=3.23 --petsc_openmp=1 --build_cmake=1 --oft_use_lto=0"
-            }
 
     steps:
     - name: Checkout repo
@@ -235,6 +170,23 @@ jobs:
         source ${{ github.workspace }}/setup_env.sh
         make install
 
+    - name: Targeted RED/GREEN for get_field time interpolation
+      shell: bash
+      working-directory: builds/build_release/tests
+      run: |
+        source ${{ github.workspace }}/setup_env.sh
+        export OMP_NUM_THREADS=2
+        PKG=../python/OpenFUSIONToolkit/io.py
+        cp $PKG /tmp/io_fixed.py
+        echo "== GREEN (fixed io.py)"
+        ./run_test.sh base/test_io.py -k test_xdmf_get_field_time -rA -p no:cacheprovider
+        echo "== RED control (fixed line reverted in build-tree copy)"
+        sed -i.bak 's/(self.time_fields\[i+1\]\[name\]-self.time_fields\[i\]\[name\])/(self.time_fields[i][name]-self.time_fields[i+1][name])/' $PKG
+        if ./run_test.sh base/test_io.py -k test_xdmf_get_field_time -rA -p no:cacheprovider; then echo "control unexpectedly passed"; exit 1; else echo "control failed as expected"; fi
+        cp /tmp/io_fixed.py $PKG
+        echo "== GREEN again (restored)"
+        ./run_test.sh base/test_io.py -rA -p no:cacheprovider
+
     - name: Test OFT
       shell: bash
       timeout-minutes: 90
@@ -259,11 +211,3 @@ jobs:
       run: |
         rm -rf build
         rm -rf petsc*
-
-    - name: Upload test results to Codecov
-      if: ${{ !cancelled() && (matrix.config.os == 'ubuntu-24.04') }}
-      uses: codecov/codecov-action@v6
-      with:
-        token: ${{ secrets.CODECOV_TOKEN }}
-        report_type: test_results
-        verbose: true
