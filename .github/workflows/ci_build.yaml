@@ -176,14 +176,18 @@ jobs:
       run: |
         source ${{ github.workspace }}/setup_env.sh
         export OMP_NUM_THREADS=2
+        # No .pyc: each swap below keeps io.py the same size, so mtime-keyed bytecode could be reused
+        export PYTHONDONTWRITEBYTECODE=1
         PKG=../python/OpenFUSIONToolkit/io.py
         cp $PKG /tmp/io_fixed.py
         echo "== GREEN (fixed io.py)"
         ./run_test.sh base/test_io.py -k test_xdmf_get_field_time -rA -p no:cacheprovider
         echo "== RED control (fixed line reverted in build-tree copy)"
         sed -i.bak 's/(self.time_fields\[i+1\]\[name\]-self.time_fields\[i\]\[name\])/(self.time_fields[i][name]-self.time_fields[i+1][name])/' $PKG
+        sleep 1; touch $PKG; grep -n 'return (self.time_fields' $PKG
         if ./run_test.sh base/test_io.py -k test_xdmf_get_field_time -rA -p no:cacheprovider; then echo "control unexpectedly passed"; exit 1; else echo "control failed as expected"; fi
         cp /tmp/io_fixed.py $PKG
+        sleep 1; touch $PKG; grep -n 'return (self.time_fields' $PKG
         echo "== GREEN again (restored)"
         ./run_test.sh base/test_io.py -rA -p no:cacheprovider
 
