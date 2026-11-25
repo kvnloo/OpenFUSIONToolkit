@@ -65,6 +65,8 @@ from the root of an OFT source checkout, with `--output-dir`):
 
 - `examples/plate_eig.json` - square plate, dense, direct solver.
 - `examples/cyl_eig.json` - cylinder with a legacy jumper nodeset (`jumper_start`).
+- `examples/plate_passive_coil_eig.json` - the plate with a passive (Vcoil) ring, which adds
+  one unknown to L.
 - `examples/ports_eig_hodlr.json` - torus with ports, ~22k unknowns, HODLR + ARPACK
   (computing L takes about a minute on 2 threads; reruns use the cache).
 
