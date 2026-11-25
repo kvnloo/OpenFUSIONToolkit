@@ -169,6 +169,9 @@ def build_operators(tw_model, case, out_dir, prefix):
     if case.get('cache', True):
         # Cache files are validated against mesh/coil/HODLR-setting hashes, so stale caches are recomputed
         cache_file = os.path.join(out_dir, '{0}_L{1}.save'.format(prefix, '_HODLR' if use_hodlr else ''))
+    if tw_model.n_vcoils > 0:
+        # Passive coils (Vcoils) are unknowns in L; their coupling to the model must be computed first
+        tw_model.compute_Mcoil()
     print('\nComputing L ({0}, {1} unknowns)'.format('HODLR' if use_hodlr else 'dense', tw_model.nelems), flush=True)
     t0 = time.perf_counter()
     tw_model.compute_Lmat(use_hodlr=use_hodlr, cache_file=oft_path(cache_file))

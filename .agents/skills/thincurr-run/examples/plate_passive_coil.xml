@@ -1,0 +1,15 @@
+<oft>
+  <thincurr>
+    <eta>1.257E-5</eta>
+    <icoils>
+      <coil_set>
+        <coil>0.5, 0.1</coil>
+      </coil_set>
+    </icoils>
+    <vcoils>
+      <coil_set name="passive_ring" res_per_len="2.2E-4" radius="0.005">
+        <coil>0.6, 0.1</coil>
+      </coil_set>
+    </vcoils>
+  </thincurr>
+</oft>
